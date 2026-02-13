@@ -4,12 +4,17 @@ class FundingTracker {
         this.soldShares = 0;
         this.totalShares = 100;
         this.priceHistory = [];
+        this.withdrawals = [];
+        this.totalWithdrawn = 0;
         this.MAX_SHARES = 100;
         this.START_PRICE = 3; // سعر أول سهم
         this.END_PRICE = 550; // سعر آخر سهم
+        this.stocks = [];
         this.loadFromStorage();
+        this.initializeStocks();
         this.updateDisplay();
         this.setupEventListeners();
+        this.startStockUpdates();
     }
     loadFromStorage() {
         const saved = localStorage.getItem('fundingData');
@@ -17,6 +22,8 @@ class FundingTracker {
             const data = JSON.parse(saved);
             this.soldShares = data.soldShares;
             this.priceHistory = data.priceHistory;
+            this.withdrawals = data.withdrawals || [];
+            this.totalWithdrawn = data.totalWithdrawn || 0;
         }
         else {
             // إذا كان أول مرة، نضيف السعر الابتدائي للتاريخ
@@ -27,7 +34,9 @@ class FundingTracker {
         const data = {
             soldShares: this.soldShares,
             totalShares: this.totalShares,
-            priceHistory: this.priceHistory
+            priceHistory: this.priceHistory,
+            withdrawals: this.withdrawals,
+            totalWithdrawn: this.totalWithdrawn
         };
         localStorage.setItem('fundingData', JSON.stringify(data));
     }
@@ -167,6 +176,154 @@ class FundingTracker {
         if (buyButton) {
             buyButton.addEventListener('click', () => this.buyShare());
         }
+        const withdrawButton = document.getElementById('withdraw-button');
+        if (withdrawButton) {
+            withdrawButton.addEventListener('click', () => this.showWithdrawalForm());
+        }
+        const withdrawalForm = document.getElementById('withdrawal-form');
+        if (withdrawalForm) {
+            withdrawalForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.processWithdrawal();
+            });
+        }
+        const cancelWithdraw = document.getElementById('cancel-withdraw');
+        if (cancelWithdraw) {
+            cancelWithdraw.addEventListener('click', () => this.hideWithdrawalForm());
+        }
+    }
+    initializeStocks() {
+        this.stocks = [
+            {
+                symbol: 'BTC',
+                name: 'بيتكوين',
+                price: 45230.50,
+                change: 1245.30,
+                changePercent: 2.83,
+                volume: '24.5B'
+            },
+            {
+                symbol: 'ETH',
+                name: 'إيثيريوم',
+                price: 2840.75,
+                change: -85.20,
+                changePercent: -2.91,
+                volume: '12.3B'
+            },
+            {
+                symbol: 'BNB',
+                name: 'بينانس كوين',
+                price: 325.40,
+                change: 12.50,
+                changePercent: 3.99,
+                volume: '1.8B'
+            },
+            {
+                symbol: 'XRP',
+                name: 'ريبل',
+                price: 0.58,
+                change: 0.03,
+                changePercent: 5.45,
+                volume: '890M'
+            }
+        ];
+        this.updateStocksDisplay();
+    }
+    startStockUpdates() {
+        // تحديث الأسعار كل 5 ثواني
+        setInterval(() => {
+            this.stocks.forEach(stock => {
+                // محاكاة تغيير السعر بنسبة عشوائية
+                const changePercent = (Math.random() - 0.5) * 2; // -1% to +1%
+                const priceChange = stock.price * (changePercent / 100);
+                stock.price += priceChange;
+                stock.change += priceChange;
+                stock.changePercent = (stock.change / (stock.price - stock.change)) * 100;
+            });
+            this.updateStocksDisplay();
+        }, 5000);
+    }
+    updateStocksDisplay() {
+        const stocksGrid = document.getElementById('stocks-grid');
+        if (!stocksGrid)
+            return;
+        stocksGrid.innerHTML = '';
+        this.stocks.forEach(stock => {
+            const stockCard = document.createElement('div');
+            stockCard.className = 'stock-card';
+            const changeClass = stock.change >= 0 ? 'positive' : 'negative';
+            const changeSymbol = stock.change >= 0 ? '▲' : '▼';
+            stockCard.innerHTML = `
+                <div class="stock-header">
+                    <span class="stock-name">${stock.name}</span>
+                    <span class="stock-symbol">${stock.symbol}</span>
+                </div>
+                <div class="stock-price">$${stock.price.toFixed(2)}</div>
+                <div class="stock-change ${changeClass}">
+                    <span>${changeSymbol}</span>
+                    <span>$${Math.abs(stock.change).toFixed(2)} (${Math.abs(stock.changePercent).toFixed(2)}%)</span>
+                </div>
+                <div class="stock-info">
+                    <span>الحجم: ${stock.volume}</span>
+                    <span>24س</span>
+                </div>
+            `;
+            stocksGrid.appendChild(stockCard);
+        });
+    }
+    showWithdrawalForm() {
+        const withdrawalCard = document.getElementById('withdrawal-card');
+        if (withdrawalCard) {
+            withdrawalCard.style.display = 'block';
+            withdrawalCard.scrollIntoView({ behavior: 'smooth' });
+        }
+    }
+    hideWithdrawalForm() {
+        const withdrawalCard = document.getElementById('withdrawal-card');
+        if (withdrawalCard) {
+            withdrawalCard.style.display = 'none';
+        }
+        // إعادة تعيين النموذج
+        const form = document.getElementById('withdrawal-form');
+        if (form) {
+            form.reset();
+        }
+    }
+    processWithdrawal() {
+        const amountInput = document.getElementById('withdraw-amount');
+        const addressInput = document.getElementById('wallet-address');
+        if (!amountInput || !addressInput)
+            return;
+        const amount = parseFloat(amountInput.value);
+        const address = addressInput.value.trim();
+        // التحقق من المبلغ المتاح
+        const availableBalance = this.getTotalValue() - this.totalWithdrawn;
+        if (amount <= 0) {
+            this.showMessage('يرجى إدخال مبلغ صحيح', 'error');
+            return;
+        }
+        if (amount > availableBalance) {
+            this.showMessage(`المبلغ المتاح للسحب: $${availableBalance.toFixed(2)} فقط`, 'error');
+            return;
+        }
+        if (!address || address.length < 10) {
+            this.showMessage('يرجى إدخال عنوان محفظة صحيح', 'error');
+            return;
+        }
+        // تسجيل عملية السحب
+        const withdrawal = {
+            amount: amount,
+            address: address,
+            timestamp: Date.now()
+        };
+        this.withdrawals.push(withdrawal);
+        this.totalWithdrawn += amount;
+        this.saveToStorage();
+        this.showMessage(`✅ تم تسجيل طلب السحب بنجاح!\n` +
+            `💰 المبلغ: $${amount.toFixed(2)}\n` +
+            `📍 سيتم التحويل إلى: ${address.substring(0, 15)}...`, 'success');
+        this.hideWithdrawalForm();
+        this.updateDisplay();
     }
 }
 // بدء التطبيق عند تحميل الصفحة
